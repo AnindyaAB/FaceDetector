@@ -42,10 +42,12 @@ Promise.all([
   faceapi.nets.ssdMobilenetv1.loadFromUri("/models"),
 ]).then(start)
 
-function start() {
+async function start() {
   const container = document.createElement("div")
   container.style.position = "relative"
   document.body.append(container)
+  const labledFaceDescriptors = await loadLabledImages()
+  const faceMatcher = new faceapi.FaceMatcher(labledFaceDescriptors, 0.6)
   imageUpload.addEventListener("change", async () => {
     const image = await faceapi.bufferToImage(imageUpload.files[0])
     container.append(image)
@@ -59,9 +61,14 @@ function start() {
       .withFaceDescriptors()
     document.body.append("Number of faces :", detection.length)
     const resizeddetection = faceapi.resizeResults(detection, displaySize)
-    resizeddetection.forEach(detection => {
-      const box = detection.detection.box
-      const drawBox = new faceapi.draw.DrawBox(box, { label: "FACE" })
+    const results = resizeddetection.map(d =>
+      faceMatcher.findBestMatch(d.descriptor)
+    )
+    results.forEach((results, i) => {
+      const box = resizeddetection[i].detection.box
+      const drawBox = new faceapi.draw.DrawBox(box, {
+        label: result.toString(),
+      })
       drawBox.draw(canvas)
     })
   })
@@ -71,11 +78,20 @@ function loadLabledImages() {
   const labels = ["Anindya", "Hug Diya"]
   return Promise.all(
     labels.map(async label => {
+      const descriptions = []
       for (let i = 1; i <= 2; i++) {
         const img = await faceapi.fetchImage(
-          `https://drive.google.com/drive/folders/1iKsxbdgOE-N_6UPlvL5eGeW0WHN6QKHk?usp=sharing/${label}/${i}.jpg`
+          `https://github.com/AnindyaAB/FaceDetector/tree/main/labeled_images/${label}/${i}.jpg`
         )
+
+        const detections = await faceapi
+          .detectSingleFace(img)
+          .withFaceLandmarks()
+          .withFaceDescriptors()
+        descriptions.push(detections.descriptor)
       }
+
+      return new faceapi.LabledFaceDescriptors(label, descriptions)
     })
   )
 }
